@@ -51,6 +51,24 @@ app.get('/api/contacts/:id', async (req, res) => {
   }
 });
 
+
+
+// GET: Obtener contacto por TELEFONO
+app.get('/api/contacts/phone/:phone', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('phone', req.params.phone)
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(404).json({ error: 'Contacto no encontrado' });
+  }
+});
+
 // POST: Crear contacto
 app.post('/api/contacts', async (req, res) => {
   try {
