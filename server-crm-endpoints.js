@@ -83,7 +83,6 @@ app.post('/api/contacts', async (req, res) => {
     const { data, error } = await supabase
       .from('contacts')
       .insert([{
-        id: Math.random().toString(36).substring(2, 15),
         name,
         email,
         phone: phone || '',
