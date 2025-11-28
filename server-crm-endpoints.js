@@ -74,8 +74,8 @@ app.post('/api/contacts', async (req, res) => {
   try {
     const { name, email, phone, company, position } = req.body;
 
-    if (!name || !email) {
-      return res.status(400).json({ error: 'Nombre y email requeridos' });
+    if (!name || !phone) {
+      return res.status(400).json({ error: 'Nombre y teléfono requeridos' });
     }
 
     const { data, error } = await supabase
