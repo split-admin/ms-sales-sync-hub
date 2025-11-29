@@ -290,6 +290,36 @@ app.get('/api/activities', async (req, res) => {
   }
 });
 
+// POST: Crear actividad
+app.post('/api/activities', async (req, res) => {
+  try {
+    const { type, description, contactId, dealId } = req.body;
+
+    if (!type || !description) {
+      return res.status(400).json({ error: 'Tipo y descripción requeridos' });
+    }
+
+    const { data, error } = await supabase
+      .from('activities')
+      .insert([{
+        type,
+        description,
+        contactId: contactId || null,
+        dealId: dealId || null,
+        createdAt: new Date().toISOString(),
+      }])
+      .select();
+
+    if (error) throw error;
+    res.status(201).json(data[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+
+
 // ============= SALUD DEL SERVIDOR =============
 
 app.get('/health', (req, res) => {
