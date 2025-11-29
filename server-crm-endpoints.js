@@ -161,7 +161,7 @@ app.post('/api/deals', async (req, res) => {
     const { data, error } = await supabase
       .from('deals')
       .insert([{
-        id: Math.random().toString(36).substring(2, 15),
+
         title,
         value: value || 0,
         stage: stage || 'lead',
@@ -230,7 +230,7 @@ app.post('/api/tasks', async (req, res) => {
     const { data, error } = await supabase
       .from('tasks')
       .insert([{
-        id: Math.random().toString(36).substring(2, 15),
+
         title,
         description: description || '',
         dueDate,
