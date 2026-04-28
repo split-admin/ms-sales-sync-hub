@@ -499,6 +499,26 @@ app.post('/api/chats/:id/send', async (req, res) => {
   }
 });
 
+// POST: Finalizar un chat
+app.post('/api/chats/:id/close', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('chat_sessions')
+      .update({
+        status: 'closed',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, message: 'Chat cerrado' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET: Consultar si un cliente tiene un chat activo o en cola (Para n8n)
 app.get('/api/chats/status/:wa_id', async (req, res) => {
   try {
@@ -515,6 +535,26 @@ app.get('/api/chats/status/:wa_id', async (req, res) => {
       hasActiveChat: !!data,
       status: data ? data.status : null
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+app.post('/api/chats/:id/close', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('chat_sessions')
+      .update({
+        status: 'closed',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, message: 'Chat cerrado' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
