@@ -541,24 +541,7 @@ app.get('/api/chats/status/:wa_id', async (req, res) => {
 });
 
 
-app.post('/api/chats/:id/close', async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('chat_sessions')
-      .update({
-        status: 'closed',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', req.params.id)
-      .select()
-      .single();
 
-    if (error) throw error;
-    res.json({ success: true, message: 'Chat cerrado' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // ============= SALUD DEL SERVIDOR =============
 
