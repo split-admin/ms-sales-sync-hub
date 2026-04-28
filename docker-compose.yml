@@ -1,0 +1,21 @@
+services:
+  ms-sales-sync-hub:
+    build: .
+    container_name: crm-endpoints
+    restart: unless-stopped
+    ports:
+      - "6300:6300"
+    env_file:
+      - .env
+    environment:
+      - VIRTUAL_HOST=sales-hub-crm.duckdns.org # Reemplaza con el subdominio de tu backend
+      - VIRTUAL_PORT=6300
+      - VIRTUAL_PROTO=http
+      - LETSENCRYPT_HOST=sales-hub-crm.duckdns.org # Reemplaza con el subdominio de tu backend
+      - LETSENCRYPT_EMAIL=[EMAIL_ADDRESS]
+    networks:
+      - mi_signes_networks
+
+networks:
+  mi_signes_networks:
+    external: true

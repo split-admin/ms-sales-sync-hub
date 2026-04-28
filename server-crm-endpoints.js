@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
 // Inicializar Supabase
 const supabase = createClient(
@@ -14,8 +14,12 @@ const supabase = createClient(
   process.env.VITE_SUPABASE_ANON_KEY
 );
 
-// Middlewares
-app.use(cors());
+
+app.use(cors({
+  origin: '*', // para probar
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -58,11 +62,12 @@ app.get('/api/contacts/:id', async (req, res) => {
 // GET: Obtener contacto por TELEFONO
 app.get('/api/contacts/phone/:phone', async (req, res) => {
   try {
+    console.log('telefono', req.params.phone)
     const { data, error } = await supabase
       .from('contacts')
       .select('*')
       .eq('phone', req.params.phone)
-      .single();
+
 
     if (error) throw error;
     res.json(data);
@@ -319,6 +324,201 @@ app.post('/api/activities', async (req, res) => {
 
 
 
+
+// ============= CHAT & COLA DE AGENTES (WHATSAPP) =============
+
+// POST: Recibir mensaje desde n8n
+app.post('/api/webhook/whatsapp', async (req, res) => {
+  try {
+    const { wa_id, name, message, timestamp } = req.body;
+
+    if (!wa_id || !message) {
+      return res.status(400).json({ error: 'wa_id y message son requeridos' });
+    }
+
+    // 1. Buscar si ya existe una sesión activa para este wa_id
+    let { data: session, error: sessionError } = await supabase
+      .from('chat_sessions')
+      .select('*')
+      .eq('wa_id', wa_id)
+      .neq('status', 'closed')
+      .single();
+
+    // 2. Si no existe, crear una nueva sesión (entra a la cola 'pending')
+    if (!session) {
+      const { data: newSession, error: createError } = await supabase
+        .from('chat_sessions')
+        .insert([{
+          wa_id,
+          customer_name: name || 'Cliente WhatsApp',
+          status: 'pending',
+          last_message: message,
+          updated_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (createError) throw createError;
+      session = newSession;
+    } else {
+      // Actualizar el último mensaje de la sesión existente
+      await supabase
+        .from('chat_sessions')
+        .update({
+          last_message: message,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', session.id);
+    }
+
+    // 3. Guardar el mensaje en el historial
+    const { error: msgError } = await supabase
+      .from('chat_messages')
+      .insert([{
+        session_id: session.id,
+        sender_id: wa_id,
+        sender_type: 'customer',
+        content: message,
+        created_at: timestamp ? new Date(parseInt(timestamp) * 1000).toISOString() : new Date().toISOString()
+      }]);
+
+    if (msgError) throw msgError;
+
+    res.json({ success: true, sessionId: session.id });
+  } catch (error) {
+    console.error('Error en webhook:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET: Obtener cola de chats (pendientes y mis activos)
+app.get('/api/chats', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('chat_sessions')
+      .select('*')
+      .neq('status', 'closed')
+      .order('updated_at', { ascending: false });
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST: Agente acepta un chat de la cola
+app.post('/api/chats/:id/accept', async (req, res) => {
+  try {
+    const { agentId } = req.body;
+    const { data, error } = await supabase
+      .from('chat_sessions')
+      .update({
+        agent_id: agentId,
+        status: 'active',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET: Obtener mensajes de una sesión
+app.get('/api/chats/:id/messages', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select('*')
+      .eq('session_id', req.params.id)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST: Agente envía un mensaje
+app.post('/api/chats/:id/send', async (req, res) => {
+  try {
+    const { content, agentId } = req.body;
+
+    // 1. Obtener la sesión
+    const { data: session } = await supabase
+      .from('chat_sessions')
+      .select('wa_id')
+      .eq('id', req.params.id)
+      .single();
+
+    // 2. Guardar mensaje
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .insert([{
+        session_id: req.params.id,
+        sender_id: agentId,
+        sender_type: 'agent',
+        content: content
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Actualizar last_message de la sesión
+    await supabase
+      .from('chat_sessions')
+      .update({
+        last_message: content,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id);
+
+    // 3. Llamar a n8n
+    const n8nUrl = process.env.N8N_WHATSAPP_SEND_URL;
+    if (n8nUrl) {
+      fetch(n8nUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wa_id: session.wa_id,
+          message: content
+        })
+      }).catch(err => console.error('Error n8n:', err));
+    }
+
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET: Consultar si un cliente tiene un chat activo o en cola (Para n8n)
+app.get('/api/chats/status/:wa_id', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('chat_sessions')
+      .select('status')
+      .eq('wa_id', req.params.wa_id)
+      .neq('status', 'closed')
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error; // PGRST116 es "no rows returned"
+
+    res.json({
+      hasActiveChat: !!data,
+      status: data ? data.status : null
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // ============= SALUD DEL SERVIDOR =============
 
