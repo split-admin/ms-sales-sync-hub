@@ -12,8 +12,8 @@ RUN npm install
 # Copiar el resto del código de la aplicación
 COPY . .
 
-# Exponer el puerto en el que corre la aplicación (definido en el .env, por defecto 6300)
-EXPOSE 6300
+# Exponer el puerto en el que corre la aplicación (definido en el .env, por defecto 5000)
+EXPOSE 5000
 
 # Comando para iniciar la aplicación
 CMD ["node", "server-crm-endpoints.js"]

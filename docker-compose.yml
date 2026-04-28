@@ -4,12 +4,13 @@ services:
     container_name: crm-endpoints
     restart: unless-stopped
     ports:
-      - "6300:6300"
+      - "5000:5000"
     env_file:
       - .env
     environment:
+      - PORT=5000
       - VIRTUAL_HOST=sales-hub-crm.duckdns.org # Reemplaza con el subdominio de tu backend
-      - VIRTUAL_PORT=6300
+      - VIRTUAL_PORT=5000
       - VIRTUAL_PROTO=http
       - LETSENCRYPT_HOST=sales-hub-crm.duckdns.org # Reemplaza con el subdominio de tu backend
       - LETSENCRYPT_EMAIL=[EMAIL_ADDRESS]
