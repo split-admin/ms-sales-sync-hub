@@ -76,6 +76,7 @@ app.get('/api/contacts/phone/:phone', async (req, res) => {
   }
 });
 
+
 // POST: Crear contacto
 app.post('/api/contacts', async (req, res) => {
   try {
@@ -99,11 +100,52 @@ app.post('/api/contacts', async (req, res) => {
       .select();
 
     if (error) throw error;
+
+    // 🚀 Aquí agregamos el envío al webhook de n8n
+    const n8nUrl = process.env.N8N_NEW_LEAD_URL;
+    if (n8nUrl) {
+      fetch(n8nUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wa_id: phone,
+          name,
+          email,
+          company,
+          position,
+          message: `Nuevo lead registrado: ${name} (${phone})`
+        })
+      }).catch(err => console.error('Error enviando a n8n:', err));
+    }
+
     res.status(201).json(data[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
+
+
+
+// PUT: Actualizar estado del lead a "contactado"
+app.put('/api/leads/:id/contacted', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('leads')
+      .update({
+        status: 'contactado',
+        message_sent: req.body.message || 'Lead marcado como contactado',
+        updatedAt: new Date().toISOString(),
+      })
+      .eq('id', req.params.id)
+      .select();
+
+    if (error) throw error;
+    res.json(data[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 // PUT: Actualizar contacto
 app.put('/api/contacts/:id', async (req, res) => {
