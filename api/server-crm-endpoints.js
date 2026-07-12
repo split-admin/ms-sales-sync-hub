@@ -29,7 +29,7 @@ app.use(express.urlencoded({ extended: true }));
 try {
   const swaggerPath = path.join(process.cwd(), 'api', 'swagger.json');
   const swaggerDocument = JSON.parse(fs.readFileSync(swaggerPath, 'utf8'));
-  
+
   const swaggerOptions = {
     customCssUrl: 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css',
     customJs: [
@@ -39,7 +39,7 @@ try {
   };
 
   app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, swaggerOptions));
-} catch (error) {}
+} catch (error) { }
 
 
 // ============= CONTACTOS =============
@@ -551,12 +551,14 @@ app.post('/api/chats/:id/send', async (req, res) => {
   try {
     const { content, agentId } = req.body;
 
-    // 1. Obtener la sesión
-    const { data: session } = await supabase
+    // 1. Obtener la sesión (con manychat_id)
+    const { data: session, error: sessionError } = await supabase
       .from('chat_sessions')
-      .select('wa_id')
+      .select('wa_id, manychat_id')
       .eq('id', req.params.id)
       .single();
+
+    if (sessionError) throw sessionError;
 
     // 2. Guardar mensaje
     const { data, error } = await supabase
@@ -581,17 +583,31 @@ app.post('/api/chats/:id/send', async (req, res) => {
       })
       .eq('id', req.params.id);
 
-    // 3. Llamar a n8n
+    // 3. Llamar a n8n (con await para poder loguear si falla)
     const n8nUrl = process.env.N8N_WHATSAPP_SEND_URL;
     if (n8nUrl) {
-      fetch(n8nUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          wa_id: session.wa_id,
-          message: content
-        })
-      }).catch(err => console.error('Error n8n:', err));
+      if (!session.manychat_id) {
+        console.warn(`⚠️ Sesión ${req.params.id} no tiene manychat_id guardado, el mensaje no podrá enviarse a WhatsApp`);
+      }
+      try {
+        const n8nResp = await fetch(n8nUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            wa_id: session.wa_id,
+            manychat_id: session.manychat_id,
+            message: content
+          })
+        });
+        if (!n8nResp.ok) {
+          const errText = await n8nResp.text();
+          console.error('n8n respondió error:', n8nResp.status, errText);
+        }
+      } catch (n8nErr) {
+        console.error('Error enviando a n8n:', n8nErr);
+      }
+    } else {
+      console.error('N8N_WHATSAPP_SEND_URL no está configurado');
     }
 
     res.json(data);
