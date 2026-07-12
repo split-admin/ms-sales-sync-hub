@@ -553,6 +553,7 @@ app.get('/api/chats/:id/messages', async (req, res) => {
   }
 });
 
+
 // POST: Agente envía un mensaje
 app.post('/api/chats/:id/send', async (req, res) => {
   try {
@@ -566,6 +567,17 @@ app.post('/api/chats/:id/send', async (req, res) => {
       .single();
 
     if (sessionError) throw sessionError;
+
+    // 1.b Obtener el último mensaje del CLIENTE (no del agente) para
+    // saber si sigue dentro de la ventana de 24h de WhatsApp
+    const { data: lastCustomerMsg } = await supabase
+      .from('chat_messages')
+      .select('created_at')
+      .eq('session_id', req.params.id)
+      .eq('sender_type', 'customer')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     // 2. Guardar mensaje
     const { data, error } = await supabase
@@ -581,7 +593,6 @@ app.post('/api/chats/:id/send', async (req, res) => {
 
     if (error) throw error;
 
-    // Actualizar last_message de la sesión
     await supabase
       .from('chat_sessions')
       .update({
@@ -590,12 +601,9 @@ app.post('/api/chats/:id/send', async (req, res) => {
       })
       .eq('id', req.params.id);
 
-    // 3. Llamar a n8n (con await para poder loguear si falla)
+    // 3. Llamar a n8n, incluyendo la fecha del último mensaje del cliente
     const n8nUrl = process.env.N8N_WHATSAPP_SEND_URL;
     if (n8nUrl) {
-      if (!session.manychat_id) {
-        console.warn(`⚠️ Sesión ${req.params.id} no tiene manychat_id guardado, el mensaje no podrá enviarse a WhatsApp`);
-      }
       try {
         const n8nResp = await fetch(n8nUrl, {
           method: 'POST',
@@ -603,18 +611,14 @@ app.post('/api/chats/:id/send', async (req, res) => {
           body: JSON.stringify({
             wa_id: session.wa_id,
             manychat_id: session.manychat_id,
-            message: content
+            message: content,
+            last_customer_message_at: lastCustomerMsg ? lastCustomerMsg.created_at : null
           })
         });
-        if (!n8nResp.ok) {
-          const errText = await n8nResp.text();
-          console.error('n8n respondió error:', n8nResp.status, errText);
-        }
+        if (!n8nResp.ok) console.error('n8n respondió error:', n8nResp.status, await n8nResp.text());
       } catch (n8nErr) {
         console.error('Error enviando a n8n:', n8nErr);
       }
-    } else {
-      console.error('N8N_WHATSAPP_SEND_URL no está configurado');
     }
 
     res.json(data);
