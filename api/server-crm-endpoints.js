@@ -632,10 +632,6 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Iniciar servidor
-app.listen(PORT, () => {
-  console.log(`✅ Servidor ejecutándose en http://localhost:${PORT}`);
-  console.log(`📚 Documentación: http://localhost:${PORT}/health`);
-});
+
 
 export default app;
