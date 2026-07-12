@@ -431,29 +431,33 @@ app.post('/api/activities', async (req, res) => {
 // POST: Recibir mensaje desde n8n
 app.post('/api/webhook/whatsapp', async (req, res) => {
   try {
-    const { wa_id, name, message, timestamp } = req.body;
+    const { wa_id, name, message, timestamp, manychat_id, escalate } = req.body;
 
     if (!wa_id || !message) {
       return res.status(400).json({ error: 'wa_id y message son requeridos' });
     }
 
-    // 1. Buscar si ya existe una sesión activa para este wa_id
-    let { data: session, error: sessionError } = await supabase
+    // Buscar la sesión no cerrada más reciente (evita crash si hay duplicados viejos)
+    const { data: sessions, error: sessionError } = await supabase
       .from('chat_sessions')
       .select('*')
       .eq('wa_id', wa_id)
       .neq('status', 'closed')
-      .single();
+      .order('updated_at', { ascending: false })
+      .limit(1);
 
-    // 2. Si no existe, crear una nueva sesión (entra a la cola 'pending')
+    if (sessionError) throw sessionError;
+    let session = sessions && sessions.length > 0 ? sessions[0] : null;
+
     if (!session) {
       const { data: newSession, error: createError } = await supabase
         .from('chat_sessions')
         .insert([{
           wa_id,
           customer_name: name || 'Cliente WhatsApp',
-          status: 'pending',
+          status: escalate ? 'pending' : 'bot',   // 👈 clave del fix
           last_message: message,
+          manychat_id: manychat_id || null,
           updated_at: new Date().toISOString()
         }])
         .select()
@@ -462,17 +466,19 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
       if (createError) throw createError;
       session = newSession;
     } else {
-      // Actualizar el último mensaje de la sesión existente
-      await supabase
-        .from('chat_sessions')
-        .update({
-          last_message: message,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', session.id);
+      const updateData = {
+        last_message: message,
+        manychat_id: manychat_id || session.manychat_id,
+        updated_at: new Date().toISOString()
+      };
+      // Solo escalamos de 'bot' a 'pending'; nunca bajamos 'active'/'pending'
+      if (escalate && session.status === 'bot') {
+        updateData.status = 'pending';
+        session.status = 'pending';
+      }
+      await supabase.from('chat_sessions').update(updateData).eq('id', session.id);
     }
 
-    // 3. Guardar el mensaje en el historial
     const { error: msgError } = await supabase
       .from('chat_messages')
       .insert([{
@@ -485,20 +491,21 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
 
     if (msgError) throw msgError;
 
-    res.json({ success: true, sessionId: session.id });
+    res.json({ success: true, sessionId: session.id, status: session.status });
   } catch (error) {
     console.error('Error en webhook:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// GET: Obtener cola de chats (pendientes y mis activos)
+
+// GET: Obtener cola de chats (solo lo que el agente debe ver)
 app.get('/api/chats', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('chat_sessions')
       .select('*')
-      .neq('status', 'closed')
+      .in('status', ['pending', 'active'])   // 👈 ya no muestra conversaciones solo-bot
       .order('updated_at', { ascending: false });
 
     if (error) throw error;
@@ -636,22 +643,21 @@ app.post('/api/chats/:id/close', async (req, res) => {
   }
 });
 
-// GET: Consultar si un cliente tiene un chat activo o en cola (Para n8n)
+// GET: Consultar si un cliente tiene chat activo/en cola (para n8n)
 app.get('/api/chats/status/:wa_id', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('chat_sessions')
       .select('status')
       .eq('wa_id', req.params.wa_id)
-      .neq('status', 'closed')
-      .single();
+      .in('status', ['pending', 'active'])   // 👈 'bot' ya NO cuenta como activo
+      .order('updated_at', { ascending: false })
+      .limit(1);
 
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 es "no rows returned"
+    if (error) throw error;
 
-    res.json({
-      hasActiveChat: !!data,
-      status: data ? data.status : null
-    });
+    const hasActiveChat = data && data.length > 0;
+    res.json({ hasActiveChat, status: hasActiveChat ? data[0].status : null });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
