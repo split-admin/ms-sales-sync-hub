@@ -1,0 +1,119 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "MS Sales Sync Hub API",
+    "version": "1.0.0",
+    "description": "API REST para gestión de CRM (Contactos, Oportunidades, Tareas, Actividades, Chat)"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Servidor Principal"
+    }
+  ],
+  "paths": {
+    "/api/contacts": {
+      "get": {
+        "summary": "Obtener todos los contactos",
+        "responses": {
+          "200": { "description": "Lista de contactos" }
+        }
+      },
+      "post": {
+        "summary": "Crear un nuevo contacto",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "email": { "type": "string" },
+                  "phone": { "type": "string" },
+                  "company": { "type": "string" },
+                  "position": { "type": "string" }
+                },
+                "required": ["name", "phone"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Contacto creado" }
+        }
+      }
+    },
+    "/api/contacts/{id}": {
+      "get": {
+        "summary": "Obtener contacto por ID",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Contacto" },
+          "404": { "description": "No encontrado" }
+        }
+      },
+      "put": {
+        "summary": "Actualizar contacto",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Contacto actualizado" }
+        }
+      },
+      "delete": {
+        "summary": "Eliminar contacto",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Contacto eliminado" }
+        }
+      }
+    },
+    "/api/deals": {
+      "get": {
+        "summary": "Obtener todas las oportunidades",
+        "responses": {
+          "200": { "description": "Lista de oportunidades" }
+        }
+      },
+      "post": {
+        "summary": "Crear oportunidad",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string" },
+                  "value": { "type": "number" },
+                  "stage": { "type": "string" },
+                  "contactId": { "type": "string" },
+                  "probability": { "type": "number" },
+                  "expectedCloseDate": { "type": "string", "format": "date-time" }
+                },
+                "required": ["title", "contactId"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Oportunidad creada" }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Salud del servidor",
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    }
+  }
+}

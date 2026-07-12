@@ -6,7 +6,6 @@ import { createClient } from '@supabase/supabase-js';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
 // Inicializar Supabase
 const supabase = createClient(
@@ -631,3 +630,5 @@ app.get('/api/chats/status/:wa_id', async (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
+
+export default app;
