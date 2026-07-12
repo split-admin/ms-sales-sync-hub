@@ -631,7 +631,3 @@ app.get('/api/chats/status/:wa_id', async (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
-
-
-
-export default app;
