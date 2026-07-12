@@ -486,7 +486,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
         sender_id: wa_id,
         sender_type: 'customer',
         content: message,
-        created_at: timestamp ? new Date(parseInt(timestamp) * 1000).toISOString() : new Date().toISOString()
+        created_at: timestamp ? new Date(timestamp).toISOString() : new Date().toISOString()
       }]);
 
     if (msgError) throw msgError;
