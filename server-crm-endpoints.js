@@ -125,6 +125,47 @@ app.post('/api/contacts', async (req, res) => {
 });
 
 
+// POST: Agente acepta un chat de la cola
+app.post('/api/chats/:id/accept', async (req, res) => {
+  try {
+    const { agentId } = req.body;
+    const { data, error } = await supabase
+      .from('chat_sessions')
+      .update({
+        agent_id: agentId,
+        status: 'active',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // 🆕 Marcar el lead correspondiente como "contactado"
+    const { data: leadMatch } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('phone', data.wa_id)
+      .neq('status', 'contactado')
+      .maybeSingle();
+
+    if (leadMatch) {
+      await supabase
+        .from('leads')
+        .update({
+          status: 'contactado',
+          message_sent: 'Agente aceptó el chat',
+          updatedAt: new Date().toISOString(),
+        })
+        .eq('id', leadMatch.id);
+    }
+
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // PUT: Actualizar estado del lead a "contactado"
 app.put('/api/leads/:id/contacted', async (req, res) => {
