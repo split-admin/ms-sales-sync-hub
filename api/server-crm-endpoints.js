@@ -29,7 +29,16 @@ app.use(express.urlencoded({ extended: true }));
 try {
   const swaggerPath = path.join(process.cwd(), 'api', 'swagger.json');
   const swaggerDocument = JSON.parse(fs.readFileSync(swaggerPath, 'utf8'));
-  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+  
+  const swaggerOptions = {
+    customCssUrl: 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css',
+    customJs: [
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-standalone-preset.js'
+    ]
+  };
+
+  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, swaggerOptions));
 } catch (error) {}
 
 
