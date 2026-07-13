@@ -576,6 +576,7 @@ app.get('/api/chats/:id/messages', async (req, res) => {
 
 
 // POST: Agente envía un mensaje
+
 app.post('/api/chats/:id/send', async (req, res) => {
   try {
     const { content, agentId } = req.body;
@@ -586,20 +587,6 @@ app.post('/api/chats/:id/send', async (req, res) => {
       .eq('id', req.params.id)
       .single();
     if (sessionError) throw sessionError;
-
-    const { data: lastCustomerMsg } = await supabase
-      .from('chat_messages')
-      .select('created_at')
-      .eq('session_id', req.params.id)
-      .eq('sender_type', 'customer')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const hoursSince = lastCustomerMsg
-      ? (Date.now() - new Date(lastCustomerMsg.created_at).getTime()) / 3600000
-      : 999;
-    const outsideWindow = hoursSince > 24;
 
     const { data, error } = await supabase
       .from('chat_messages')
@@ -613,14 +600,10 @@ app.post('/api/chats/:id/send', async (req, res) => {
       .single();
     if (error) throw error;
 
-    const sessionUpdate = {
-      last_message: content,
-      updated_at: new Date().toISOString()
-    };
-    if (outsideWindow) {
-      sessionUpdate.pending_agent_message = content;
-    }
-    await supabase.from('chat_sessions').update(sessionUpdate).eq('id', req.params.id);
+    await supabase
+      .from('chat_sessions')
+      .update({ last_message: content, updated_at: new Date().toISOString() })
+      .eq('id', req.params.id);
 
     const n8nUrl = process.env.N8N_WHATSAPP_SEND_URL;
     if (n8nUrl) {
@@ -631,8 +614,7 @@ app.post('/api/chats/:id/send', async (req, res) => {
           body: JSON.stringify({
             wa_id: session.wa_id,
             manychat_id: session.manychat_id,
-            message: content,
-            outside_window: outsideWindow
+            message: content
           })
         });
         if (!n8nResp.ok) console.error('n8n respondió error:', n8nResp.status, await n8nResp.text());
@@ -641,11 +623,45 @@ app.post('/api/chats/:id/send', async (req, res) => {
       }
     }
 
-    res.json({ ...data, outsideWindow });
+    res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
+
+
+
+// POST: n8n reporta que un mensaje no se pudo entregar (ventana de 24h cerrada)
+app.post('/api/chats/mark-pending', async (req, res) => {
+  try {
+    const { wa_id, message } = req.body;
+    if (!wa_id || !message) {
+      return res.status(400).json({ error: 'wa_id y message son requeridos' });
+    }
+
+    const { data: sessions, error: sessionError } = await supabase
+      .from('chat_sessions')
+      .select('id')
+      .eq('wa_id', wa_id)
+      .neq('status', 'closed')
+      .order('updated_at', { ascending: false })
+      .limit(1);
+    if (sessionError) throw sessionError;
+    if (!sessions || sessions.length === 0) {
+      return res.status(404).json({ error: 'Sesión no encontrada' });
+    }
+
+    await supabase
+      .from('chat_sessions')
+      .update({ pending_agent_message: message })
+      .eq('id', sessions[0].id);
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 // POST: Finalizar un chat
 app.post('/api/chats/:id/close', async (req, res) => {
