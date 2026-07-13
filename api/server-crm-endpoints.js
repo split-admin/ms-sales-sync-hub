@@ -47,6 +47,7 @@ try {
 // GET: Obtener todos los contactos
 app.get('/api/contacts', async (req, res) => {
   try {
+    console.log('➡️ [GET] /api/contacts - INICIANDO');
     const { data, error } = await supabase
       .from('contacts')
       .select('*')
@@ -55,6 +56,7 @@ app.get('/api/contacts', async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    console.error('❌ [GET] /api/contacts - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -62,6 +64,7 @@ app.get('/api/contacts', async (req, res) => {
 // GET: Obtener contacto por ID
 app.get('/api/contacts/:id', async (req, res) => {
   try {
+    console.log('➡️ [GET] /api/contacts/:id - INICIANDO');
     const { data, error } = await supabase
       .from('contacts')
       .select('*')
@@ -71,6 +74,7 @@ app.get('/api/contacts/:id', async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    console.error('❌ [GET] /api/contacts/:id - ERROR:', error.message || error);
     res.status(404).json({ error: 'Contacto no encontrado' });
   }
 });
@@ -80,6 +84,7 @@ app.get('/api/contacts/:id', async (req, res) => {
 // GET: Obtener contacto por TELEFONO
 app.get('/api/contacts/phone/:phone', async (req, res) => {
   try {
+    console.log('➡️ [GET] /api/contacts/phone/:phone - INICIANDO');
     console.log('telefono', req.params.phone)
     const { data, error } = await supabase
       .from('contacts')
@@ -90,6 +95,7 @@ app.get('/api/contacts/phone/:phone', async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    console.error('❌ [GET] /api/contacts/phone/:phone - ERROR:', error.message || error);
     res.status(404).json({ error: 'Contacto no encontrado' });
   }
 });
@@ -98,6 +104,7 @@ app.get('/api/contacts/phone/:phone', async (req, res) => {
 // POST: Crear contacto
 app.post('/api/contacts', async (req, res) => {
   try {
+    console.log('➡️ [POST] /api/contacts - INICIANDO');
     const { name, email, phone, company, position } = req.body;
 
     if (!name || !phone) {
@@ -122,6 +129,7 @@ app.post('/api/contacts', async (req, res) => {
     // 🚀 Aquí agregamos el envío al webhook de n8n 
     const n8nUrl = process.env.N8N_NEW_LEAD_URL;
     if (n8nUrl) {
+      console.log('🔵 INTENTANDO LLAMAR A N8N [NEW LEAD]:', n8nUrl, 'wa_id:', phone); 
       fetch(n8nUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -133,11 +141,16 @@ app.post('/api/contacts', async (req, res) => {
           position,
           message: `Nuevo lead registrado: ${name} (${phone})`
         })
-      }).catch(err => console.error('Error enviando a n8n:', err));
+      })
+      .then(n8nResp => console.log('🟢 RESPUESTA DE N8N [NEW LEAD]:', n8nResp.status))
+      .catch(n8nErr => console.error('🔴 ERROR ENVIANDO A N8N [NEW LEAD]:', n8nErr));
+    } else {
+      console.log('⚠️ N8N_NEW_LEAD_URL no está configurada.');
     }
 
     res.status(201).json(data[0]);
   } catch (error) {
+    console.error('❌ [POST] /api/contacts - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -146,6 +159,7 @@ app.post('/api/contacts', async (req, res) => {
 // POST: Agente acepta un chat de la cola
 app.post('/api/chats/:id/accept', async (req, res) => {
   try {
+    console.log('➡️ [POST] /api/chats/:id/accept - INICIANDO');
     const { agentId } = req.body;
     const { data, error } = await supabase
       .from('chat_sessions')
@@ -181,6 +195,7 @@ app.post('/api/chats/:id/accept', async (req, res) => {
 
     res.json(data);
   } catch (error) {
+    console.error('❌ [POST] /api/chats/:id/accept - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -188,6 +203,7 @@ app.post('/api/chats/:id/accept', async (req, res) => {
 // PUT: Actualizar estado del lead a "contactado"
 app.put('/api/leads/:id/contacted', async (req, res) => {
   try {
+    console.log('➡️ [PUT] /api/leads/:id/contacted - INICIANDO');
     const { data, error } = await supabase
       .from('leads')
       .update({
@@ -201,6 +217,7 @@ app.put('/api/leads/:id/contacted', async (req, res) => {
     if (error) throw error;
     res.json(data[0]);
   } catch (error) {
+    console.error('❌ [PUT] /api/leads/:id/contacted - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -209,6 +226,7 @@ app.put('/api/leads/:id/contacted', async (req, res) => {
 // PUT: Actualizar contacto
 app.put('/api/contacts/:id', async (req, res) => {
   try {
+    console.log('➡️ [PUT] /api/contacts/:id - INICIANDO');
     const { data, error } = await supabase
       .from('contacts')
       .update({
@@ -224,6 +242,7 @@ app.put('/api/contacts/:id', async (req, res) => {
     }
     res.json(data[0]);
   } catch (error) {
+    console.error('❌ [PUT] /api/contacts/:id - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -231,9 +250,11 @@ app.put('/api/contacts/:id', async (req, res) => {
 // DELETE: Eliminar contacto
 app.delete('/api/contacts/:id', async (req, res) => {
   try {
+    console.log('➡️ [DELETE] /api/contacts/:id - INICIANDO');
     await supabase.from('contacts').delete().eq('id', req.params.id);
     res.json({ message: 'Contacto eliminado' });
   } catch (error) {
+    console.error('❌ [DELETE] /api/contacts/:id - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -243,6 +264,7 @@ app.delete('/api/contacts/:id', async (req, res) => {
 // GET: Obtener todas las oportunidades
 app.get('/api/deals', async (req, res) => {
   try {
+    console.log('➡️ [GET] /api/deals - INICIANDO');
     const { data, error } = await supabase
       .from('deals')
       .select('*')
@@ -251,6 +273,7 @@ app.get('/api/deals', async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    console.error('❌ [GET] /api/deals - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -258,6 +281,7 @@ app.get('/api/deals', async (req, res) => {
 // POST: Crear oportunidad
 app.post('/api/deals', async (req, res) => {
   try {
+    console.log('➡️ [POST] /api/deals - INICIANDO');
     const { title, value, stage, contactId, probability, expectedCloseDate } = req.body;
 
     if (!title || !contactId) {
@@ -282,6 +306,7 @@ app.post('/api/deals', async (req, res) => {
     if (error) throw error;
     res.status(201).json(data[0]);
   } catch (error) {
+    console.error('❌ [POST] /api/deals - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -289,6 +314,7 @@ app.post('/api/deals', async (req, res) => {
 // PUT: Actualizar etapa de oportunidad
 app.put('/api/deals/:id/stage', async (req, res) => {
   try {
+    console.log('➡️ [PUT] /api/deals/:id/stage - INICIANDO');
     const { stage } = req.body;
 
     const { data, error } = await supabase
@@ -303,6 +329,7 @@ app.put('/api/deals/:id/stage', async (req, res) => {
     if (error) throw error;
     res.json(data[0]);
   } catch (error) {
+    console.error('❌ [PUT] /api/deals/:id/stage - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -312,6 +339,7 @@ app.put('/api/deals/:id/stage', async (req, res) => {
 // GET: Obtener todas las tareas
 app.get('/api/tasks', async (req, res) => {
   try {
+    console.log('➡️ [GET] /api/tasks - INICIANDO');
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
@@ -320,6 +348,7 @@ app.get('/api/tasks', async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    console.error('❌ [GET] /api/tasks - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -327,6 +356,7 @@ app.get('/api/tasks', async (req, res) => {
 // POST: Crear tarea
 app.post('/api/tasks', async (req, res) => {
   try {
+    console.log('➡️ [POST] /api/tasks - INICIANDO');
     const { title, description, dueDate, priority, contactId, dealId } = req.body;
 
     if (!title || !dueDate) {
@@ -351,6 +381,7 @@ app.post('/api/tasks', async (req, res) => {
     if (error) throw error;
     res.status(201).json(data[0]);
   } catch (error) {
+    console.error('❌ [POST] /api/tasks - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -358,6 +389,7 @@ app.post('/api/tasks', async (req, res) => {
 // PUT: Marcar tarea como completada
 app.put('/api/tasks/:id/toggle', async (req, res) => {
   try {
+    console.log('➡️ [PUT] /api/tasks/:id/toggle - INICIANDO');
     // Obtener el estado actual
     const { data: current } = await supabase
       .from('tasks')
@@ -374,6 +406,7 @@ app.put('/api/tasks/:id/toggle', async (req, res) => {
     if (error) throw error;
     res.json(data[0]);
   } catch (error) {
+    console.error('❌ [PUT] /api/tasks/:id/toggle - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -383,6 +416,7 @@ app.put('/api/tasks/:id/toggle', async (req, res) => {
 // GET: Obtener todas las actividades
 app.get('/api/activities', async (req, res) => {
   try {
+    console.log('➡️ [GET] /api/activities - INICIANDO');
     const { data, error } = await supabase
       .from('activities')
       .select('*')
@@ -392,6 +426,7 @@ app.get('/api/activities', async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    console.error('❌ [GET] /api/activities - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -399,6 +434,7 @@ app.get('/api/activities', async (req, res) => {
 // POST: Crear actividad
 app.post('/api/activities', async (req, res) => {
   try {
+    console.log('➡️ [POST] /api/activities - INICIANDO');
     const { type, description, contactId, dealId } = req.body;
 
     if (!type || !description) {
@@ -419,6 +455,7 @@ app.post('/api/activities', async (req, res) => {
     if (error) throw error;
     res.status(201).json(data[0]);
   } catch (error) {
+    console.error('❌ [POST] /api/activities - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -431,6 +468,7 @@ app.post('/api/activities', async (req, res) => {
 // POST: Recibir mensaje desde n8n
 app.post('/api/webhook/whatsapp', async (req, res) => {
   try {
+    console.log('➡️ [POST] /api/webhook/whatsapp - INICIANDO');
     const { wa_id, name, message, timestamp, manychat_id, escalate } = req.body;
 
     if (!wa_id || !message) {
@@ -495,6 +533,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     if (session.pending_agent_message) {
       const n8nUrl = process.env.N8N_WHATSAPP_SEND_URL;
       if (n8nUrl) {
+        console.log('🔵 INTENTANDO LLAMAR A N8N [PENDING MSG]:', n8nUrl, 'wa_id:', session.wa_id); 
         fetch(n8nUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -504,7 +543,11 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
             message: session.pending_agent_message,
             outside_window: false
           })
-        }).catch(err => console.error('Error enviando pendiente:', err));
+        })
+        .then(n8nResp => console.log('🟢 RESPUESTA DE N8N [PENDING MSG]:', n8nResp.status))
+        .catch(n8nErr => console.error('🔴 ERROR ENVIANDO A N8N [PENDING MSG]:', n8nErr));
+      } else {
+        console.log('⚠️ N8N_WHATSAPP_SEND_URL no está configurada.');
       }
       await supabase
         .from('chat_sessions')
@@ -514,6 +557,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
 
     res.json({ success: true, sessionId: session.id, status: session.status });
   } catch (error) {
+    console.error('❌ [POST] /api/webhook/whatsapp - ERROR:', error.message || error);
     console.error('Error en webhook:', error);
     res.status(500).json({ error: error.message });
   }
@@ -523,6 +567,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
 // GET: Obtener cola de chats (solo lo que el agente debe ver)
 app.get('/api/chats', async (req, res) => {
   try {
+    console.log('➡️ [GET] /api/chats - INICIANDO');
     const { data, error } = await supabase
       .from('chat_sessions')
       .select('*')
@@ -532,6 +577,7 @@ app.get('/api/chats', async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    console.error('❌ [GET] /api/chats - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -539,6 +585,7 @@ app.get('/api/chats', async (req, res) => {
 // POST: Agente acepta un chat de la cola
 app.post('/api/chats/:id/accept', async (req, res) => {
   try {
+    console.log('➡️ [POST] /api/chats/:id/accept - INICIANDO');
     const { agentId } = req.body;
     const { data, error } = await supabase
       .from('chat_sessions')
@@ -554,6 +601,7 @@ app.post('/api/chats/:id/accept', async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    console.error('❌ [POST] /api/chats/:id/accept - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -561,6 +609,7 @@ app.post('/api/chats/:id/accept', async (req, res) => {
 // GET: Obtener mensajes de una sesión
 app.get('/api/chats/:id/messages', async (req, res) => {
   try {
+    console.log('➡️ [GET] /api/chats/:id/messages - INICIANDO');
     const { data, error } = await supabase
       .from('chat_messages')
       .select('*')
@@ -570,6 +619,7 @@ app.get('/api/chats/:id/messages', async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    console.error('❌ [GET] /api/chats/:id/messages - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -579,6 +629,7 @@ app.get('/api/chats/:id/messages', async (req, res) => {
 
 app.post('/api/chats/:id/send', async (req, res) => {
   try {
+    console.log('➡️ [POST] /api/chats/:id/send - INICIANDO');
     const { content, agentId } = req.body;
 
     const { data: session, error: sessionError } = await supabase
@@ -607,6 +658,7 @@ app.post('/api/chats/:id/send', async (req, res) => {
 
     const n8nUrl = process.env.N8N_WHATSAPP_SEND_URL;
     if (n8nUrl) {
+      console.log('🔵 INTENTANDO LLAMAR A N8N [AGENT SEND]:', n8nUrl, 'wa_id:', session.wa_id); 
       try {
         const n8nResp = await fetch(n8nUrl, {
           method: 'POST',
@@ -617,14 +669,18 @@ app.post('/api/chats/:id/send', async (req, res) => {
             message: content
           })
         });
-        if (!n8nResp.ok) console.error('n8n respondió error:', n8nResp.status, await n8nResp.text());
+        console.log('🟢 RESPUESTA DE N8N [AGENT SEND]:', n8nResp.status);
+        if (!n8nResp.ok) console.error('🔴 n8n respondió error:', n8nResp.status, await n8nResp.text());
       } catch (n8nErr) {
-        console.error('Error enviando a n8n:', n8nErr);
+        console.error('🔴 ERROR ENVIANDO A N8N [AGENT SEND]:', n8nErr);
       }
+    } else {
+      console.log('⚠️ N8N_WHATSAPP_SEND_URL no está configurada.');
     }
 
     res.json(data);
   } catch (error) {
+    console.error('❌ [POST] /api/chats/:id/send - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -634,6 +690,7 @@ app.post('/api/chats/:id/send', async (req, res) => {
 // POST: n8n reporta que un mensaje no se pudo entregar (ventana de 24h cerrada)
 app.post('/api/chats/mark-pending', async (req, res) => {
   try {
+    console.log('➡️ [POST] /api/chats/mark-pending - INICIANDO');
     const { wa_id, message } = req.body;
     if (!wa_id || !message) {
       return res.status(400).json({ error: 'wa_id y message son requeridos' });
@@ -658,6 +715,7 @@ app.post('/api/chats/mark-pending', async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
+    console.error('❌ [POST] /api/chats/mark-pending - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -666,6 +724,7 @@ app.post('/api/chats/mark-pending', async (req, res) => {
 // POST: Finalizar un chat
 app.post('/api/chats/:id/close', async (req, res) => {
   try {
+    console.log('➡️ [POST] /api/chats/:id/close - INICIANDO');
     const { data, error } = await supabase
       .from('chat_sessions')
       .update({
@@ -679,6 +738,7 @@ app.post('/api/chats/:id/close', async (req, res) => {
     if (error) throw error;
     res.json({ success: true, message: 'Chat cerrado' });
   } catch (error) {
+    console.error('❌ [POST] /api/chats/:id/close - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -686,6 +746,7 @@ app.post('/api/chats/:id/close', async (req, res) => {
 // GET: Consultar si un cliente tiene chat activo/en cola (para n8n)
 app.get('/api/chats/status/:wa_id', async (req, res) => {
   try {
+    console.log('➡️ [GET] /api/chats/status/:wa_id - INICIANDO');
     const { data, error } = await supabase
       .from('chat_sessions')
       .select('status')
@@ -699,6 +760,7 @@ app.get('/api/chats/status/:wa_id', async (req, res) => {
     const hasActiveChat = data && data.length > 0;
     res.json({ hasActiveChat, status: hasActiveChat ? data[0].status : null });
   } catch (error) {
+    console.error('❌ [GET] /api/chats/status/:wa_id - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -709,6 +771,7 @@ app.get('/api/chats/status/:wa_id', async (req, res) => {
 // ============= SALUD DEL SERVIDOR =============
 
 app.get('/health', (req, res) => {
+  console.log('➡️ [GET] /health - INICIANDO');
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
