@@ -95,16 +95,6 @@ app.get('/api/contacts/phone/:phone', async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
-    console.log('telefono', req.params.phone)
-    const { data, error } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('phone', req.params.phone)
-
-
-    if (error) throw error;
-    res.json(data);
-  } catch (error) {
     console.error('❌ [GET] /api/contacts/phone/:phone - ERROR:', error.message || error);
     res.status(404).json({ error: 'Contacto no encontrado' });
   }
@@ -480,6 +470,42 @@ app.post('/api/activities', async (req, res) => {
 app.post('/api/webhook/whatsapp', async (req, res) => {
   try {
     console.log('➡️ [POST] /api/webhook/whatsapp - INICIANDO');
+    const { wa_id, name, message, timestamp, manychat_id, escalate, tenant_id } = req.body;
+
+    if (!wa_id || !message) {
+      return res.status(400).json({ error: 'wa_id y message son requeridos' });
+    }
+
+    // Buscar la sesión no cerrada más reciente (evita crash si hay duplicados viejos)
+    const { data: sessions, error: sessionError } = await supabase
+      .from('chat_sessions')
+      .select('*')
+      .eq('wa_id', wa_id)
+      .neq('status', 'closed')
+      .order('updated_at', { ascending: false })
+      .limit(1);
+
+    if (sessionError) throw sessionError;
+    let session = sessions && sessions.length > 0 ? sessions[0] : null;
+
+    if (!session) {
+      const { data: newSession, error: createError } = await supabase
+        .from('chat_sessions')
+        .insert([{
+          wa_id,
+          customer_name: name || 'Cliente WhatsApp',
+          status: escalate ? 'pending' : 'bot',
+          last_message: message,
+          manychat_id: manychat_id || null,
+          tenant_id: tenant_id || null,
+          updated_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (createError) throw createError;
+      session = newSession;
+    } else {
       const updateData = {
         last_message: message,
         manychat_id: manychat_id || session.manychat_id,
