@@ -455,7 +455,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
         .insert([{
           wa_id,
           customer_name: name || 'Cliente WhatsApp',
-          status: escalate ? 'pending' : 'bot',   // 👈 clave del fix
+          status: escalate ? 'pending' : 'bot',
           last_message: message,
           manychat_id: manychat_id || null,
           updated_at: new Date().toISOString()
@@ -471,7 +471,6 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
         manychat_id: manychat_id || session.manychat_id,
         updated_at: new Date().toISOString()
       };
-      // Solo escalamos de 'bot' a 'pending'; nunca bajamos 'active'/'pending'
       if (escalate && session.status === 'bot') {
         updateData.status = 'pending';
         session.status = 'pending';
@@ -490,6 +489,28 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
       }]);
 
     if (msgError) throw msgError;
+
+    // 🆕 Si había un mensaje del agente en cola (bloqueado por la ventana
+    // de 24h), ahora que el cliente escribió, lo mandamos ya mismo
+    if (session.pending_agent_message) {
+      const n8nUrl = process.env.N8N_WHATSAPP_SEND_URL;
+      if (n8nUrl) {
+        fetch(n8nUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            wa_id: session.wa_id,
+            manychat_id: manychat_id || session.manychat_id,
+            message: session.pending_agent_message,
+            outside_window: false
+          })
+        }).catch(err => console.error('Error enviando pendiente:', err));
+      }
+      await supabase
+        .from('chat_sessions')
+        .update({ pending_agent_message: null })
+        .eq('id', session.id);
+    }
 
     res.json({ success: true, sessionId: session.id, status: session.status });
   } catch (error) {
@@ -559,17 +580,13 @@ app.post('/api/chats/:id/send', async (req, res) => {
   try {
     const { content, agentId } = req.body;
 
-    // 1. Obtener la sesión (con manychat_id)
     const { data: session, error: sessionError } = await supabase
       .from('chat_sessions')
       .select('wa_id, manychat_id')
       .eq('id', req.params.id)
       .single();
-
     if (sessionError) throw sessionError;
 
-    // 1.b Obtener el último mensaje del CLIENTE (no del agente) para
-    // saber si sigue dentro de la ventana de 24h de WhatsApp
     const { data: lastCustomerMsg } = await supabase
       .from('chat_messages')
       .select('created_at')
@@ -579,7 +596,11 @@ app.post('/api/chats/:id/send', async (req, res) => {
       .limit(1)
       .maybeSingle();
 
-    // 2. Guardar mensaje
+    const hoursSince = lastCustomerMsg
+      ? (Date.now() - new Date(lastCustomerMsg.created_at).getTime()) / 3600000
+      : 999;
+    const outsideWindow = hoursSince > 24;
+
     const { data, error } = await supabase
       .from('chat_messages')
       .insert([{
@@ -590,18 +611,17 @@ app.post('/api/chats/:id/send', async (req, res) => {
       }])
       .select()
       .single();
-
     if (error) throw error;
 
-    await supabase
-      .from('chat_sessions')
-      .update({
-        last_message: content,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', req.params.id);
+    const sessionUpdate = {
+      last_message: content,
+      updated_at: new Date().toISOString()
+    };
+    if (outsideWindow) {
+      sessionUpdate.pending_agent_message = content;
+    }
+    await supabase.from('chat_sessions').update(sessionUpdate).eq('id', req.params.id);
 
-    // 3. Llamar a n8n, incluyendo la fecha del último mensaje del cliente
     const n8nUrl = process.env.N8N_WHATSAPP_SEND_URL;
     if (n8nUrl) {
       try {
@@ -612,7 +632,7 @@ app.post('/api/chats/:id/send', async (req, res) => {
             wa_id: session.wa_id,
             manychat_id: session.manychat_id,
             message: content,
-            last_customer_message_at: lastCustomerMsg ? lastCustomerMsg.created_at : null
+            outside_window: outsideWindow
           })
         });
         if (!n8nResp.ok) console.error('n8n respondió error:', n8nResp.status, await n8nResp.text());
@@ -621,7 +641,7 @@ app.post('/api/chats/:id/send', async (req, res) => {
       }
     }
 
-    res.json(data);
+    res.json({ ...data, outsideWindow });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
