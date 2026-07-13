@@ -95,6 +95,16 @@ app.get('/api/contacts/phone/:phone', async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    console.log('telefono', req.params.phone)
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('phone', req.params.phone)
+
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
     console.error('❌ [GET] /api/contacts/phone/:phone - ERROR:', error.message || error);
     res.status(404).json({ error: 'Contacto no encontrado' });
   }
@@ -105,7 +115,7 @@ app.get('/api/contacts/phone/:phone', async (req, res) => {
 app.post('/api/contacts', async (req, res) => {
   try {
     console.log('➡️ [POST] /api/contacts - INICIANDO');
-    const { name, email, phone, company, position } = req.body;
+    const { name, email, phone, company, position, tenant_id } = req.body;
 
     if (!name || !phone) {
       return res.status(400).json({ error: 'Nombre y teléfono requeridos' });
@@ -119,6 +129,7 @@ app.post('/api/contacts', async (req, res) => {
         phone: phone || '',
         company: company || '',
         position: position || '',
+        tenant_id: tenant_id || null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }])
@@ -174,19 +185,19 @@ app.post('/api/chats/:id/accept', async (req, res) => {
 
     if (error) throw error;
 
-    // 🆕 Marcar el lead correspondiente como "contactado"
+    // 🆕 Marcar el deal correspondiente como "contactado"
     const { data: leadMatch } = await supabase
-      .from('leads')
+      .from('deals')
       .select('id')
-      .eq('phone', data.wa_id)
-      .neq('status', 'contactado')
+      .eq('phone', data.wa_id) // Asumiendo que deals tiene columna phone (si no, esto fallará)
+      .neq('stage', 'contactado')
       .maybeSingle();
 
     if (leadMatch) {
       await supabase
-        .from('leads')
+        .from('deals')
         .update({
-          status: 'contactado',
+          stage: 'contactado',
           message_sent: 'Agente aceptó el chat',
           updatedAt: new Date().toISOString(),
         })
@@ -200,15 +211,15 @@ app.post('/api/chats/:id/accept', async (req, res) => {
   }
 });
 
-// PUT: Actualizar estado del lead a "contactado"
-app.put('/api/leads/:id/contacted', async (req, res) => {
+// PUT: Actualizar estado del deal a "contactado"
+app.put('/api/deals/:id/contacted', async (req, res) => {
   try {
-    console.log('➡️ [PUT] /api/leads/:id/contacted - INICIANDO');
+    console.log('➡️ [PUT] /api/deals/:id/contacted - INICIANDO');
     const { data, error } = await supabase
-      .from('leads')
+      .from('deals')
       .update({
-        status: 'contactado',
-        message_sent: req.body.message || 'Lead marcado como contactado',
+        stage: 'contactado',
+        message_sent: req.body.message || 'Deal marcado como contactado',
         updatedAt: new Date().toISOString(),
       })
       .eq('id', req.params.id)
@@ -217,7 +228,7 @@ app.put('/api/leads/:id/contacted', async (req, res) => {
     if (error) throw error;
     res.json(data[0]);
   } catch (error) {
-    console.error('❌ [PUT] /api/leads/:id/contacted - ERROR:', error.message || error);
+    console.error('❌ [PUT] /api/deals/:id/contacted - ERROR:', error.message || error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -282,7 +293,7 @@ app.get('/api/deals', async (req, res) => {
 app.post('/api/deals', async (req, res) => {
   try {
     console.log('➡️ [POST] /api/deals - INICIANDO');
-    const { title, value, stage, contactId, probability, expectedCloseDate } = req.body;
+    const { title, value, stage, contactId, probability, expectedCloseDate, tenant_id } = req.body;
 
     if (!title || !contactId) {
       return res.status(400).json({ error: 'Título y contactoId requeridos' });
@@ -291,13 +302,13 @@ app.post('/api/deals', async (req, res) => {
     const { data, error } = await supabase
       .from('deals')
       .insert([{
-
         title,
         value: value || 0,
         stage: stage || 'lead',
         contactId,
         probability: probability || 20,
         expectedCloseDate: expectedCloseDate || new Date().toISOString(),
+        tenant_id: tenant_id || null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }])
@@ -469,41 +480,6 @@ app.post('/api/activities', async (req, res) => {
 app.post('/api/webhook/whatsapp', async (req, res) => {
   try {
     console.log('➡️ [POST] /api/webhook/whatsapp - INICIANDO');
-    const { wa_id, name, message, timestamp, manychat_id, escalate } = req.body;
-
-    if (!wa_id || !message) {
-      return res.status(400).json({ error: 'wa_id y message son requeridos' });
-    }
-
-    // Buscar la sesión no cerrada más reciente (evita crash si hay duplicados viejos)
-    const { data: sessions, error: sessionError } = await supabase
-      .from('chat_sessions')
-      .select('*')
-      .eq('wa_id', wa_id)
-      .neq('status', 'closed')
-      .order('updated_at', { ascending: false })
-      .limit(1);
-
-    if (sessionError) throw sessionError;
-    let session = sessions && sessions.length > 0 ? sessions[0] : null;
-
-    if (!session) {
-      const { data: newSession, error: createError } = await supabase
-        .from('chat_sessions')
-        .insert([{
-          wa_id,
-          customer_name: name || 'Cliente WhatsApp',
-          status: escalate ? 'pending' : 'bot',
-          last_message: message,
-          manychat_id: manychat_id || null,
-          updated_at: new Date().toISOString()
-        }])
-        .select()
-        .single();
-
-      if (createError) throw createError;
-      session = newSession;
-    } else {
       const updateData = {
         last_message: message,
         manychat_id: manychat_id || session.manychat_id,
